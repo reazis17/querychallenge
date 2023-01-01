@@ -1,0 +1,197 @@
+**----SCHEMA & TABLE :**
+
+CREATE SCHEMA dannys_diner;
+SET search_path = dannys_diner;
+
+CREATE TABLE sales (
+  "customer_id" VARCHAR(1),
+  "order_date" DATE,
+  "product_id" INTEGER
+);
+
+INSERT INTO sales
+  ("customer_id", "order_date", "product_id")
+VALUES
+  ('A', '2021-01-01', '1'),
+  ('A', '2021-01-01', '2'),
+  ('A', '2021-01-07', '2'),
+  ('A', '2021-01-10', '3'),
+  ('A', '2021-01-11', '3'),
+  ('A', '2021-01-11', '3'),
+  ('B', '2021-01-01', '2'),
+  ('B', '2021-01-02', '2'),
+  ('B', '2021-01-04', '1'),
+  ('B', '2021-01-11', '1'),
+  ('B', '2021-01-16', '3'),
+  ('B', '2021-02-01', '3'),
+  ('C', '2021-01-01', '3'),
+  ('C', '2021-01-01', '3'),
+  ('C', '2021-01-07', '3');
+ 
+CREATE TABLE menu (
+  "product_id" INTEGER,
+  "product_name" VARCHAR(5),
+  "price" INTEGER
+);
+
+INSERT INTO menu
+  ("product_id", "product_name", "price")
+VALUES
+  ('1', 'sushi', '10'),
+  ('2', 'curry', '15'),
+  ('3', 'ramen', '12');
+  
+CREATE TABLE members (
+  "customer_id" VARCHAR(1),
+  "join_date" DATE
+);
+
+INSERT INTO members
+  ("customer_id", "join_date")
+VALUES
+  ('A', '2021-01-07'),
+  ('B', '2021-01-09');
+
+
+
+**----CHALLENGE**
+
+--1. Total amount spend by each customer!
+--2. How many days customer visited the restaurant?
+--3. What was the first item from the menu purchased by each customer?
+--4. What is the most purchased item on the menu and how many times was it purchased by all customers?
+--5. Which item was the most popular for each customer?
+--6. Which item was purchased first by the customer after they became a member?
+--7. Which item was purchased just before the customer became a member?
+--8. What is the total items and amount spent for each member before they became a member?
+--9. If each $1 spent equates to 10 points and sushi has a 2x points multiplier - how many points would each customer have?
+--10. In the first week after a customer joins the program (including their join date) they earn 2x points on all items, not just sushi - how many points do customer A and B have at the end of January?
+
+
+
+**----SOLUTIONS**
+
+1
+SELECT mr.customer_id, SUM(a.price) AS total_price
+FROM sales mr
+JOIN menu a
+ON mr.product_id = a.product_id
+GROUP BY mr.customer_id;
+
+2
+SELECT customer_id, COUNT(DISTINCT (order_date)) AS total_days
+FROM sales
+GROUP BY customer_id;
+
+3
+WITH mra AS (
+SELECT mr.customer_id, a.product_name, mr.order_date,
+DENSE_RANK() OVER(PARTITION BY mr.customer_id ORDER BY mr.order_date) AS rank
+FROM sales mr
+JOIN menu a
+ON mr.product_id = a.product_id
+GROUP BY mr.customer_id, a.product_name
+            )
+            SELECT customer_id, product_name
+            FROM MRA
+            WHERE rank = 1;
+
+4
+SELECT mr.product_name, COUNT(a.product_id) AS total_buy
+FROM menu mr
+JOIN sales a
+ON mr.product_id = a.product_id
+GROUP BY mr.product_name
+ORDER BY COUNT(a.product_id) DESC
+LIMIT 1;
+
+5
+WITH mra AS (
+SELECT mr.customer_id, a.product_name, COUNT(mr.product_id) AS fav,
+DENSE_RANK() OVER(PARTITION BY mr.customer_id ORDER BY COUNT(mr.product_id) DESC) AS rank
+FROM sales mr
+JOIN menu a
+ON mr.product_id = a.product_id
+GROUP BY mr.customer_id, a.product_name
+            )
+            SELECT customer_id, product_name, fav
+            FROM mra
+            WHERE rank = 1;
+
+6
+WITH mra AS (
+SELECT m.customer_id, r.product_name, m.order_date, a.join_date,
+DENSE_RANK() OVER(PARTITION BY m.customer_id ORDER BY m.order_date) AS rank
+FROM sales m
+JOIN menu r
+ON m.product_id = r.product_id
+JOIN members a
+ON m.customer_id = a.customer_id
+WHERE m.order_date >= a.join_date
+            )
+            SELECT customer_id, product_name
+            FROM mra
+            WHERE rank = 1;
+
+7
+WITH mra AS (
+SELECT m.customer_id, r.product_name, m.order_date, a.join_date,
+DENSE_RANK() OVER(PARTITION BY m.customer_id ORDER BY m.order_date) AS rank
+FROM sales m
+JOIN menu r
+ON m.product_id = r.product_id
+JOIN members a
+ON m.customer_id = a.customer_id
+WHERE m.order_date < a.join_date
+            )
+            SELECT customer_id, product_name
+            FROM mra
+            WHERE rank = 1;
+
+8
+SELECT m.customer_id, COUNT(m.product_id) AS total_items, SUM(r.price) AS total_price, a.join_date
+FROM sales m
+JOIN menu r
+ON m.product_id = r.product_id
+JOIN members a
+ON m.customer_id = a.customer_id
+WHERE m.order_date < a.join_date
+GROUP BY m.customer_id;
+
+9
+With mra as
+	(
+	Select *, Case When product_id = 1 THEN price*20
+	               Else price*10
+		       End as mra
+	From menu
+	)
+	Select m.customer_id, SUM(r.mra) as Points
+	From sales m
+	Join mra r
+	On m.product_id = r.product_id
+	Group by m.customer_id;
+
+10
+WITH dates AS 
+	(
+	   SELECT *, 
+	      DATEADD(DAY, 6, join_date) AS valid_date, 
+	      EOMONTH('2021-01-31') AS last_date
+	   FROM members 
+	)
+	Select S.Customer_id, 
+	       SUM(
+		   Case 
+		  When m.product_ID = 1 THEN m.price*20
+		  When S.order_date between D.join_date and D.valid_date Then m.price*20
+		  Else m.price*10
+		  END 
+		  ) as Points
+	From Dates D
+	join Sales S
+	On D.customer_id = S.customer_id
+	Join Menu M
+	On M.product_id = S.product_id
+	Where S.order_date < d.last_date
+	Group by S.customer_id;
