@@ -1,0 +1,50 @@
+CREATE PROCEDURE [auto_backup_all_tables]
+AS
+BEGIN
+
+--Created by Muhammad Reza Azis
+--Tributed to Firman Fakhri Mukti as Expert SQL Tutor
+
+DECLARE @dates DATE
+SET @dates = GETDATE()
+--PRINT @dates
+
+DECLARE @dates_varchar VARCHAR(10)
+SET @dates_varchar = CONVERT(VARCHAR(8), @dates, 112)
+--PRINT @dates_varchar
+
+DECLARE @tablename VARCHAR(50)
+
+DECLARE @COUNTER INT
+SET @COUNTER = 1
+
+DROP TABLE IF EXISTS #list_table
+SELECT table_name, ROW_NUMBER() OVER(ORDER BY table_name) AS number
+INTO #list_table
+FROM INFORMATION_SCHEMA.TABLES
+WHERE table_name NOT LIKE '%2023%'
+
+DECLARE @countmax INT
+SET @countmax = (SELECT COUNT(*) FROM #list_table)
+--PRINT @countmax
+
+WHILE (@counter <= @countmax)
+BEGIN
+
+SET @tablename = (SELECT table_name FROM #list_table WHERE number = @COUNTER)
+--PRINT @tablename
+
+DECLARE @sql VARCHAR(MAX)
+SET @sql = 'DROP TABLE IF EXISTS ' + @tablename + '_' + @dates_varchar + CHAR(13) +
+           'SELECT * INTO ' + @tablename + '_' + @dates_varchar + CHAR(13) +
+		   'FROM ' + @tablename
+--PRINT @sql
+EXEC (@sql)
+PRINT 'table ' + @tablename + ' has been automatically backup into ' + @tablename + '_' + @dates_varchar
+
+SET @COUNTER = @COUNTER + 1
+
+END
+
+END
+GO
